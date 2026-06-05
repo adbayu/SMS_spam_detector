@@ -1,0 +1,6 @@
+{
+  "pipeline": "bert_knn",
+  "model_name": "bert-base-uncased",
+  "max_length": 128,
+  "embedding": "mean_pool_last_hidden_state"
+}
