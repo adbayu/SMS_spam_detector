@@ -84,22 +84,18 @@ try {
     if ($isSpam) {
       $explain = json_encode(['keywords' => [], 'indicators' => ['Model classified this SMS as spam'], 'confidence' => $result['confidence']]);
       db()->prepare('INSERT INTO spam_analysis (message_id, severity, explanation, created_at) VALUES (?, ?, ?, NOW())')->execute([$recipientMessageId, severity_from_confidence((float)$result['confidence']), $explain]);
-
-      $senderConversationId = $getConversation((int)$sender['id'], $recipientPhone, $recipientName);
-      $hiddenBody = 'Pesan disembunyikan karena terdeteksi spam.';
-      $insert->execute([$senderConversationId, $sender['phone'], $hiddenBody, 'outgoing', 'spam', $result['confidence']]);
-      $senderMessageId = db()->lastInsertId();
-      db()->prepare('UPDATE conversations SET contact_name = ?, is_spam = 1, updated_at = NOW() WHERE id = ?')->execute([$recipientName, $senderConversationId]);
-      db()->prepare('INSERT INTO spam_analysis (message_id, severity, explanation, created_at) VALUES (?, ?, ?, NOW())')->execute([$senderMessageId, severity_from_confidence((float)$result['confidence']), $explain]);
-      json_response(['id' => $senderMessageId, 'conversation_id' => $senderConversationId, 'recipient_conversation_id' => $recipientConversationId, 'hidden_from_sender' => true, 'classification' => $result], 201);
     }
 
     $senderConversationId = $getConversation((int)$sender['id'], $recipientPhone, $recipientName);
-    $insert->execute([$senderConversationId, $sender['phone'], $message, 'outgoing', 'ham', $result['confidence']]);
+    $insert->execute([$senderConversationId, $sender['phone'], $message, 'outgoing', $result['prediction'], $result['confidence']]);
     $senderMessageId = db()->lastInsertId();
-    db()->prepare('UPDATE conversations SET contact_name = ?, is_spam = 0, updated_at = NOW() WHERE id = ?')->execute([$recipientName, $senderConversationId]);
+    db()->prepare('UPDATE conversations SET contact_name = ?, is_spam = GREATEST(is_spam, ?), updated_at = NOW() WHERE id = ?')->execute([$recipientName, $isSpam, $senderConversationId]);
 
-    json_response(['id' => $senderMessageId, 'conversation_id' => $senderConversationId, 'recipient_conversation_id' => $recipientConversationId, 'classification' => $result], 201);
+    if ($isSpam) {
+      $explain = json_encode(['keywords' => [], 'indicators' => ['Model classified this SMS as spam'], 'confidence' => $result['confidence']]);
+      db()->prepare('INSERT INTO spam_analysis (message_id, severity, explanation, created_at) VALUES (?, ?, ?, NOW())')->execute([$senderMessageId, severity_from_confidence((float)$result['confidence']), $explain]);
+    }
+    json_response(['id' => $senderMessageId, 'conversation_id' => $senderConversationId, 'recipient_conversation_id' => $recipientConversationId, 'message' => $message, 'prediction' => $result['prediction'], 'confidence' => $result['confidence']], 201);
   }
 
   if ($path === 'api/spam' && $_SERVER['REQUEST_METHOD'] === 'GET') {
