@@ -49,8 +49,21 @@ try {
 
   if (preg_match('#^api/conversations/(\d+)$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'DELETE') {
     $user = current_user();
+    $conversationId = (int)$m[1];
+    // First, get all message IDs from this conversation
+    $stmt = db()->prepare('SELECT id FROM messages WHERE conversation_id = ?');
+    $stmt->execute([$conversationId]);
+    $messageIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    // Delete spam_analysis records for these messages
+    if ($messageIds) {
+      $placeholders = implode(',', array_fill(0, count($messageIds), '?'));
+      db()->prepare("DELETE FROM spam_analysis WHERE message_id IN ($placeholders)")->execute($messageIds);
+    }
+    // Delete messages for this conversation
+    db()->prepare('DELETE FROM messages WHERE conversation_id = ?')->execute([$conversationId]);
+    // Finally, delete the conversation
     $stmt = db()->prepare('DELETE FROM conversations WHERE id = ? AND user_id = ?');
-    $stmt->execute([(int)$m[1], $user['id']]);
+    $stmt->execute([$conversationId, $user['id']]);
     json_response(['ok' => true]);
   }
 

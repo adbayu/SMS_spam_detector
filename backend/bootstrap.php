@@ -4,7 +4,7 @@ function json_response($data, int $status = 200): void {
   header('Content-Type: application/json');
   header('Access-Control-Allow-Origin: *');
   header('Access-Control-Allow-Headers: Content-Type, X-User-Phone');
-  header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+  header('Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS');
   echo json_encode($data, JSON_UNESCAPED_SLASHES);
   exit;
 }
