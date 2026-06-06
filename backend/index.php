@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require __DIR__ . '/bootstrap.php';
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') json_response(['ok' => true]);
 $path = trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
@@ -47,6 +47,25 @@ try {
     json_response(['ok' => true]);
   }
 
+  if (preg_match('#^api/conversations/(\d+)/unblock$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $user = current_user();
+    $stmt = db()->prepare('UPDATE conversations SET is_spam = 0 WHERE id = ? AND user_id = ?');
+    $stmt->execute([(int)$m[1], $user['id']]);
+    json_response(['ok' => true]);
+  }
+
+  if (preg_match('#^api/messages/(\d+)$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'DELETE') {
+    $user = current_user();
+    $messageId = (int)$m[1];
+    $stmt = db()->prepare('SELECT m.id FROM messages m JOIN conversations c ON c.id = m.conversation_id WHERE m.id = ? AND c.user_id = ?');
+    $stmt->execute([$messageId, $user['id']]);
+    if ($stmt->fetch()) {
+      db()->prepare('DELETE FROM spam_analysis WHERE message_id = ?')->execute([$messageId]);
+      db()->prepare('DELETE FROM messages WHERE id = ?')->execute([$messageId]);
+    }
+    json_response(['ok' => true]);
+  }
+
   if (preg_match('#^api/conversations/(\d+)$#', $path, $m) && $_SERVER['REQUEST_METHOD'] === 'DELETE') {
     $user = current_user();
     $conversationId = (int)$m[1];
@@ -74,7 +93,11 @@ try {
     $recipientName = trim($body['contact_name'] ?? $recipientPhone);
     if ($message === '' || $recipientPhone === '') json_response(['error' => 'contact_phone and message are required'], 422);
 
-    $recipient = upsert_user($recipientPhone, $recipientName);
+    $recipient = user_by_phone($recipientPhone);
+    if (!$recipient) {
+      json_response(['error' => 'Nomor tujuan tidak terdaftar di sistem'], 404);
+    }
+    
     $result = classify_message($message);
     $isSpam = $result['prediction'] === 'spam' ? 1 : 0;
 
@@ -102,7 +125,7 @@ try {
     $senderConversationId = $getConversation((int)$sender['id'], $recipientPhone, $recipientName);
     $insert->execute([$senderConversationId, $sender['phone'], $message, 'outgoing', $result['prediction'], $result['confidence']]);
     $senderMessageId = db()->lastInsertId();
-    db()->prepare('UPDATE conversations SET contact_name = ?, is_spam = GREATEST(is_spam, ?), updated_at = NOW() WHERE id = ?')->execute([$recipientName, $isSpam, $senderConversationId]);
+    db()->prepare('UPDATE conversations SET contact_name = ?, updated_at = NOW() WHERE id = ?')->execute([$recipientName, $senderConversationId]);
 
     if ($isSpam) {
       $explain = json_encode(['keywords' => [], 'indicators' => ['Model classified this SMS as spam'], 'confidence' => $result['confidence']]);
