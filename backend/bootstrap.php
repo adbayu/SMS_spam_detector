@@ -44,11 +44,11 @@ function current_user(): array {
 function normalize_prediction(string $label): string {
   return strtolower(trim($label)) === 'spam' ? 'spam' : 'ham';
 }
-function classify_message(string $message): array {
+function classify_message(string $message, string $modelType = 'knn'): array {
   $config = require __DIR__ . '/config.php';
   $script = $config['model_script'];
   if (!is_file($script)) json_response(['error' => 'model script not found', 'path' => $script], 500);
-  $cmd = escapeshellarg($config['python']) . ' ' . escapeshellarg($script) . ' ' . escapeshellarg($message);
+  $cmd = escapeshellarg($config['python']) . ' ' . escapeshellarg($script) . ' --model ' . escapeshellarg($modelType) . ' ' . escapeshellarg($message);
   $lines = [];
   $code = 0;
   exec($cmd . ' 2>&1', $lines, $code);

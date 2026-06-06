@@ -98,7 +98,8 @@ try {
       json_response(['error' => 'Nomor tujuan tidak terdaftar di sistem'], 404);
     }
     
-    $result = classify_message($message);
+    $modelType = $body['model'] ?? 'knn';
+    $result = classify_message($message, $modelType);
     $isSpam = $result['prediction'] === 'spam' ? 1 : 0;
 
     $getConversation = function (int $userId, string $contactPhone, string $contactName) {
